@@ -108,23 +108,65 @@ CREATE TABLE IF NOT EXISTS t_item_dept_arch (
 
 CREATE TABLE IF NOT EXISTS t_item_implement_card (
   id bigint NOT NULL COMMENT '主键',
-  bill_no varchar(64) DEFAULT NULL COMMENT '实施清单配置卡号',
-  node_no int DEFAULT NULL COMMENT '本卡版次序',
-  site_id int DEFAULT NULL COMMENT '所属承办部门底册',
-  site_no varchar(64) DEFAULT NULL COMMENT '所属部门底册代号',
+  bill_no varchar(64) DEFAULT NULL COMMENT '实施清单配置卡号(系统发,同一卡跨版次共用)',
+  impl_code varchar(64) DEFAULT NULL COMMENT '实施编码(系统发)',
+  node_no int DEFAULT NULL COMMENT '本卡版次序(旧纸卡迁入可空,首立按1起)',
+  site_id bigint DEFAULT NULL COMMENT '所属承办部门底册主键',
+  site_no varchar(64) DEFAULT NULL COMMENT '所属部门底册代号(只凭代号对册)',
+  item_code varchar(64) DEFAULT NULL COMMENT '事项码(与底册代号配平认卡)',
+  handle_level int DEFAULT NULL COMMENT '承办层级 1省定标准 2市实施 3县延伸',
+  upper_item_no varchar(64) DEFAULT NULL COMMENT '省定:上位名录那一条的代号',
+  upper_basis_clause varchar(128) DEFAULT NULL COMMENT '省定:设定依据的条款号',
+  city_refine_text varchar(500) DEFAULT NULL COMMENT '市实施:本市细化那几条',
+  city_eff_start datetime DEFAULT NULL COMMENT '市实施:起头那一日',
+  city_eff_end datetime DEFAULT NULL COMMENT '市实施:结尾那一日',
+  extend_window_count int DEFAULT NULL COMMENT '县延伸:延伸到的窗口数',
+  extend_point_count int DEFAULT NULL COMMENT '县延伸:收件点数目',
+  region_path varchar(128) DEFAULT NULL COMMENT '立卡时底册区划快照(省—市—县),改隶不搬旧卡',
+  entrust_site_no varchar(64) DEFAULT NULL COMMENT '跨市协办受托底册代号(只摆给受托那一家)',
+  year_no varchar(8) DEFAULT NULL COMMENT '立卡年度(跨年同屏不重复计)',
   qty decimal(12,2) DEFAULT NULL COMMENT '本卡申报年办件量(件/年)',
   fine_amt decimal(12,2) DEFAULT NULL COMMENT '本卡承诺时限(工作日)',
-  content varchar(255) DEFAULT NULL COMMENT '校验串（随版次序走）',
-  grade_level int DEFAULT NULL COMMENT '年办件量折到的服务监督层级',
-  status int DEFAULT NULL COMMENT '进展 0待核对 1已核对 2已冻住',
+  content varchar(255) DEFAULT NULL COMMENT '校验串(走到已核对才钉,只由系统写)',
+  grade_level int DEFAULT NULL COMMENT '年办件量折到的服务监督层级(只由系统折)',
+  steps_done int DEFAULT NULL COMMENT '已走完步数 0待核对 1已核对 2已冻住(状态照它自数)',
+  status int DEFAULT NULL COMMENT '进展镜像 0待核对 1已核对 2已冻住(旧纸卡可空)',
+  current_flag int DEFAULT '1' COMMENT '现行标记 0历史旧版 1现行(日常只摆现行)',
+  stop_flag int DEFAULT '0' COMMENT '就地叫停 0否 1是(叫停即腾出同事项名额)',
+  legacy_flag int DEFAULT '0' COMMENT '纸质簿迁入旧卡 0否 1是(缺步数/版次/串也接得住)',
+  opener_name varchar(64) DEFAULT NULL COMMENT '开卡人(一钉下随卡一生,不换)',
+  handler_name varchar(64) DEFAULT NULL COMMENT '本趟经办人(办一次续一名,不覆盖开卡人)',
   del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
   create_by varchar(64) DEFAULT NULL COMMENT '创建者',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
   update_by varchar(64) DEFAULT NULL COMMENT '更新者',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  KEY idx_card_pair (site_no, item_code, current_flag),
+  KEY idx_card_bill (bill_no, node_no),
+  KEY idx_card_region (region_path)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='实施清单配置卡';
+
+-- 卡的每一趟过步留痕：回退重走另起一趟，旧记录不与后补并作一处。
+CREATE TABLE IF NOT EXISTS t_item_card_trail (
+  id bigint NOT NULL COMMENT '主键',
+  card_id bigint DEFAULT NULL COMMENT '卡主键',
+  bill_no varchar(64) DEFAULT NULL COMMENT '卡号',
+  node_no int DEFAULT NULL COMMENT '当时版次序',
+  round_no int DEFAULT '1' COMMENT '第几趟(每回退一次,后补记在下一趟)',
+  action varchar(32) DEFAULT NULL COMMENT '动作 open/advance/back/qty/rehang/revise/stop',
+  from_step int DEFAULT NULL COMMENT '动前步数',
+  to_step int DEFAULT NULL COMMENT '动后步数',
+  from_grade int DEFAULT NULL COMMENT '动前层级',
+  to_grade int DEFAULT NULL COMMENT '动后层级',
+  operator_name varchar(64) DEFAULT NULL COMMENT '本趟经办人',
+  trail_time datetime DEFAULT NULL COMMENT '落记时刻',
+  note varchar(500) DEFAULT NULL COMMENT '记事',
+  del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
+  PRIMARY KEY (id),
+  KEY idx_trail_card (card_id, round_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='事项卡过步留痕';
 
 -- 初始档案数据（两条种子底册：一条在编、一条已撤并）
 -- t_item_dept_arch 两条种子底册：id=0 在编、id=1 已撤并。

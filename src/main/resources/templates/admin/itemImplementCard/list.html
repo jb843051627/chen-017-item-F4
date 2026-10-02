@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.pollix.at/thymeleaf/shiro">
+<head>
+    <th:block th:include="include :: header('实施清单配置卡')"/>
+</head>
+<body class="pear-container">
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <form class="layui-form" action="">
+            <div class="layui-form-item">
+                <label class="layui-form-label">账号范围</label>
+                <div class="layui-input-inline">
+                    <select name="scopeGrade" lay-filter="scopeGrade">
+                        <option value="3">县局（只看本县一册）</option>
+                        <option value="2">市局（看本市所辖各县）</option>
+                        <option value="1" selected>省办（全辖）</option>
+                        <option value="4">跨市协办受托方</option>
+                    </select>
+                </div>
+                <label class="layui-form-label">区划(省—市—县)</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="regionPath" placeholder="如 青屏省—青屏市" class="layui-input">
+                </div>
+                <label class="layui-form-label">受托代号</label>
+                <div class="layui-input-inline">
+                    <input type="text" name="entrustSiteNo" placeholder="协办时填受托底册代号" class="layui-input">
+                </div>
+                <label class="layui-form-label">年度</label>
+                <div class="layui-input-inline" style="width:100px">
+                    <input type="text" name="yearNo" placeholder="如 2026" class="layui-input">
+                </div>
+                <button class="pear-btn pear-btn-md pear-btn-primary" lay-submit lay-filter="card-query">
+                    <i class="layui-icon layui-icon-search"></i> 查询
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="layui-card">
+    <div class="layui-card-body">
+        <div class="layui-form-item">
+            <button shiro:hasPermission="item:itemImplementCard:add"
+                    class="pear-btn pear-btn-primary pear-btn-md" lay-event="open">
+                <i class="layui-icon layui-icon-add-1"></i> 立卡
+            </button>
+            <button class="pear-btn pear-btn-md" lay-event="census">
+                <i class="layui-icon layui-icon-chart"></i> 年底本级一屏（卡数／名录数同回算）
+            </button>
+            <button shiro:hasPermission="item:itemImplementCard:add"
+                    class="pear-btn pear-btn-md" lay-event="legacy">
+                <i class="layui-icon layui-icon-upload"></i> 旧纸卡迁入
+            </button>
+            <span class="layui-badge layui-bg-gray" style="margin-left:12px">
+                一项事项一张卡 · 一张卡只挂一本册 · 一册只归一家部门
+            </span>
+        </div>
+        <table id="card-table" lay-filter="card-table"></table>
+    </div>
+</div>
+
+<script type="text/html" id="card-bar">
+    <button shiro:hasPermission="item:itemImplementCard:edit"
+            class="pear-btn pear-btn-primary pear-btn-sm" lay-event="advance">往前再走一步</button>
+    <button shiro:hasPermission="item:itemImplementCard:edit"
+            class="pear-btn pear-btn-warming pear-btn-sm" lay-event="back">退回一步</button>
+    <button shiro:hasPermission="item:itemImplementCard:edit"
+            class="pear-btn pear-btn-danger pear-btn-sm" lay-event="stop">叫停</button>
+    <button shiro:hasPermission="item:itemImplementCard:edit"
+            class="pear-btn pear-btn-normal pear-btn-sm" lay-event="qty">改办件量</button>
+    <button shiro:hasPermission="item:itemImplementCard:edit"
+            class="pear-btn pear-btn-normal pear-btn-sm" lay-event="rehang">改挂靠</button>
+    <button shiro:hasPermission="item:itemImplementCard:add"
+            class="pear-btn pear-btn-primary pear-btn-sm" lay-event="revise">换版</button>
+    <button class="pear-btn pear-btn-sm" lay-event="history">历史版次</button>
+</script>
+
+<script type="text/html" id="step-tpl">
+    {{#  if(d.stepsDone === 2 || d.status === 2){ }}<span class="layui-badge">已冻住</span>
+    {{#  } else if(d.stepsDone === 1 || d.status === 1){ }}<span class="layui-badge layui-bg-blue">已核对</span>
+    {{#  } else { }}<span class="layui-badge layui-bg-gray">待核对</span>{{#  } }}
+</script>
+
+<script type="text/html" id="level-tpl">
+    {{#  if(d.handleLevel === 1){ }}省定标准
+    {{#  } else if(d.handleLevel === 2){ }}市实施
+    {{#  } else if(d.handleLevel === 3){ }}县延伸
+    {{#  } else { }}<span class="layui-badge layui-bg-gray">旧卡未填</span>{{#  } }}
+</script>
+
+<th:block th:include="include :: footer"/>
+<script th:inline="javascript">
+    layui.use(['table', 'form', 'jquery', 'layer'], function () {
+        let table = layui.table, form = layui.form, $ = layui.jquery, layer = layui.layer;
+        let MP = rootPath + "/ItemImplementCardController/";
+
+        let cols = [[
+            {field: 'billNo', title: '清单卡号', width: 190},
+            {field: 'nodeNo', title: '版次', width: 60, align: 'center'},
+            {field: 'siteNo', title: '底册代号', width: 90},
+            {field: 'itemCode', title: '事项码', width: 110},
+            {field: 'handleLevel', title: '承办层级', width: 95, templet: '#level-tpl'},
+            {field: 'qty', title: '年办件量', width: 90, align: 'right'},
+            {field: 'fineAmt', title: '承诺时限(工作日)', width: 130, align: 'right'},
+            {field: 'gradeLevel', title: '监督层级', width: 90, align: 'center'},
+            {field: 'stepsDone', title: '当前步(步数自数)', width: 130, templet: '#step-tpl'},
+            {field: 'stopFlag', title: '叫停', width: 70, align: 'center',
+                templet: function (d) { return d.stopFlag === 1 ? '是' : '否'; }},
+            {field: 'openerName', title: '开卡人', width: 90},
+            {field: 'handlerName', title: '本趟经办人', width: 100},
+            {title: '操作', width: 470, align: 'center', toolbar: '#card-bar', fixed: 'right'}
+        ]];
+
+        function reload(where) {
+            table.render({
+                elem: '#card-table', url: MP + 'visibleList', method: 'get', page: false,
+                skin: 'line', cols: cols, where: where,
+                parseData: function (res) {
+                    return {code: res.code === 200 ? 0 : res.code, msg: res.msg,
+                            count: (res.data || []).length, data: res.data || []};
+                }
+            });
+        }
+        reload({scopeGrade: 1});
+
+        form.on('submit(card-query)', function (data) {
+            reload(data.field);
+            return false;
+        });
+
+        // 拒收统一回执：指名空栏 + 未来起头日先问一句
+        function rejected(res, again) {
+            let msg = res.msg || '卡不进库';
+            if (res.fields && res.fields.length) {
+                msg += '：空在【' + res.fields.join('、') + '】';
+            }
+            if (res.needConfirm) {
+                layer.confirm(msg + '。起头日在日后，仍要收下吗？', {icon: 3, title: '先问一句'},
+                    function (idx) { layer.close(idx); again(true); });
+            } else {
+                layer.alert(msg, {icon: 2});
+            }
+        }
+
+        function openForm() {
+            layer.open({
+                type: 1, title: '立一张事项卡', area: ['760px', '640px'],
+                content: '' +
+                '<form class="layui-form" style="padding:18px" id="open-f">' +
+                '<div class="layui-form-item"><label class="layui-form-label">底册代号*</label>' +
+                '<div class="layui-input-block"><input name="siteNo" class="layui-input" placeholder="只凭代号对册，名号相近不算"></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">事项码*</label>' +
+                '<div class="layui-input-block"><input name="itemCode" class="layui-input"></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">承办层级*</label>' +
+                '<div class="layui-input-block"><select name="handleLevel" lay-filter="hl">' +
+                '<option value="">请选择</option><option value="1">省定标准</option>' +
+                '<option value="2">市实施</option><option value="3">县延伸</option></select></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">年办件量*</label>' +
+                '<div class="layui-input-inline"><input name="qty" class="layui-input"></div>' +
+                '<label class="layui-form-label">承诺时限*</label>' +
+                '<div class="layui-input-inline"><input name="fineAmt" class="layui-input" placeholder="工作日"></div></div>' +
+                '<div id="hl-tip" class="layui-form-item layui-text" style="color:#999;padding:0 110px"></div>' +
+                '<div class="layui-form-item level-1"><label class="layui-form-label">上位名录代号*</label>' +
+                '<div class="layui-input-inline"><input name="upperItemNo" class="layui-input"></div>' +
+                '<label class="layui-form-label">条款号*</label>' +
+                '<div class="layui-input-inline"><input name="upperBasisClause" class="layui-input"></div></div>' +
+                '<div class="layui-form-item level-2"><label class="layui-form-label">本市细化几条*</label>' +
+                '<div class="layui-input-block"><input name="cityRefineText" class="layui-input"></div></div>' +
+                '<div class="layui-form-item level-2"><label class="layui-form-label">起头日*</label>' +
+                '<div class="layui-input-inline"><input name="cityEffStart" id="cityEffStart" class="layui-input" placeholder="yyyy-MM-dd HH:mm:ss"></div>' +
+                '<label class="layui-form-label">结尾日*</label>' +
+                '<div class="layui-input-inline"><input name="cityEffEnd" class="layui-input"></div></div>' +
+                '<div class="layui-form-item level-3"><label class="layui-form-label">窗口数*</label>' +
+                '<div class="layui-input-inline"><input name="extendWindowCount" class="layui-input"></div>' +
+                '<label class="layui-form-label">收件点数*</label>' +
+                '<div class="layui-input-inline"><input name="extendPointCount" class="layui-input"></div></div>' +
+                '<div class="layui-form-item"><label class="layui-form-label">跨市协办受托</label>' +
+                '<div class="layui-input-block"><input name="entrustSiteNo" class="layui-input" placeholder="非协办留空"></div></div>' +
+                '<div class="layui-form-item"><div class="layui-input-block">' +
+                '<button class="pear-btn pear-btn-primary" lay-submit lay-filter="open-submit">立卡</button></div></div>' +
+                '</form>',
+                success: function () {
+                    $('.level-1,.level-2,.level-3').hide();
+                    form.render();
+                    form.on('select(hl)', function (d) {
+                        $('.level-1,.level-2,.level-3').hide();
+                        if (d.value === '1') $('.level-1').show();
+                        if (d.value === '2') $('.level-2').show();
+                        if (d.value === '3') $('.level-3').show();
+                        $.get(MP + 'requiredFields', {handleLevel: d.value}, function (r) {
+                            $('#hl-tip').text('本层级非写不可：' + (r.data || []).join('、'));
+                        });
+                    });
+                    form.on('submit(open-submit)', function (data) {
+                        function doOpen(confirm) {
+                            $.post(MP + 'open', $.extend(data.field, {confirm: confirm ? 1 : 0}),
+                                function (res) {
+                                    if (res.code === 200) {
+                                        layer.closeAll(); layer.msg(res.msg, {icon: 1});
+                                        table.reload('card-table');
+                                    } else { rejected(res, doOpen); }
+                                });
+                        }
+                        doOpen(false);
+                        return false;
+                    });
+                }
+            });
+        }
+
+        $('.pear-btn[lay-event="open"]').on('click', openForm);
+        $('.pear-btn[lay-event="legacy"]').on('click', function () {
+            layer.prompt({title: '旧纸卡迁入：贴底册代号（其余步数/版次/串可空）'}, function (siteNo, idx) {
+                $.post(MP + 'admitLegacy', {siteNo: siteNo}, function (res) {
+                    layer.close(idx);
+                    if (res.code === 200) { layer.msg('旧卡已接入，按在走对待', {icon: 1}); table.reload('card-table'); }
+                    else rejected(res, function () {});
+                });
+            });
+        });
+        $('.pear-btn[lay-event="census"]').on('click', function () {
+            let f = {};
+            $('.layui-form').serializeArray().forEach(function (x) { f[x.name] = x.value; });
+            $.get(MP + 'census', f, function (res) {
+                let d = res.data, lines = ['年度：' + (res.year || ''),
+                    '卡上占的数（现行卡）：' + d.cardCount,
+                    '本级名录上的数（底册代号＋事项码去重）：' + d.catalogCount,
+                    '两处同一回算出，须一致。分级：'];
+                Object.keys(d.countByGrade).forEach(function (g) {
+                    lines.push('　第 ' + g + ' 层：' + d.countByGrade[g] + ' 张（空着的层不摆空行）');
+                });
+                layer.alert(lines.join('<br>'), {title: '年底本级一屏', area: ['480px', '320px']});
+            });
+        });
+
+        table.on('tool(card-table)', function (obj) {
+            let d = obj.data, tr = obj.tr;
+            function post(url, data, ok) {
+                $.post(url, data, function (res) {
+                    if (res.code === 200) { layer.msg(res.msg, {icon: 1, time: 900}); table.reload('card-table'); if (ok) ok(res); }
+                    else rejected(res, function () {});
+                });
+            }
+            if (obj.event === 'advance') {
+                layer.confirm('往前再走一步？到“已核对”将钉死校验串，到“已冻住”即到头。',
+                    function (i) { layer.close(i); post(MP + 'advance', {id: d.id}); });
+            } else if (obj.event === 'back') {
+                layer.confirm('退回上一档重来？上一趟记录照旧留痕，不与后补并作一处。',
+                    function (i) { layer.close(i); post(MP + 'back', {id: d.id}); });
+            } else if (obj.event === 'stop') {
+                layer.confirm('就地叫停？同事项名额当场空出。',
+                    function (i) { layer.close(i); post(MP + 'stop', {id: d.id}); });
+            } else if (obj.event === 'qty') {
+                layer.prompt({title: '新的年办件量（折层随它重算）', value: d.qty},
+                    function (v, i) { layer.close(i); post(MP + 'changeQty', {id: d.id, qty: v}); });
+            } else if (obj.event === 'rehang') {
+                layer.prompt({title: '改挂到哪一本册（只认代号）'},
+                    function (v, i) { layer.close(i); post(MP + 'rehang', {id: d.id, newSiteNo: v}); });
+            } else if (obj.event === 'revise') {
+                layer.confirm('另起新版？旧版退出现行归历史、旧串不动，新版待核对重走、钉新串。',
+                    function (i) { layer.close(i);
+                        function doRev(confirm) {
+                            $.post(MP + 'revise', {id: d.id, confirm: confirm ? 1 : 0},
+                                function (res) {
+                                    if (res.code === 200) { layer.msg(res.msg, {icon: 1}); table.reload('card-table'); }
+                                    else rejected(res, doRev);
+                                });
+                        }
+                        doRev(false);
+                    });
+            } else if (obj.event === 'history') {
+                $.get(MP + 'history', {billNo: d.billNo}, function (res) {
+                    let rows = (res.data || []).map(function (c) {
+                        return '第' + (c.nodeNo == null ? '?' : c.nodeNo) + '版　'
+                            + (c.currentFlag === 1 ? '现行' : '历史')
+                            + '　串：' + (c.content || '（未钉）');
+                    }).join('<br>');
+                    layer.alert(rows || '无', {title: '历史版次翻检'});
+                });
+            }
+        });
+    });
+</script>
+</body>
+</html>
