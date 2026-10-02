@@ -108,23 +108,51 @@ CREATE TABLE IF NOT EXISTS t_item_dept_arch (
 
 CREATE TABLE IF NOT EXISTS t_item_implement_card (
   id bigint NOT NULL COMMENT '主键',
-  bill_no varchar(64) DEFAULT NULL COMMENT '实施清单配置卡号',
+  bill_no varchar(64) DEFAULT NULL COMMENT '实施清单配置卡号(系统发)',
   node_no int DEFAULT NULL COMMENT '本卡版次序',
   site_id int DEFAULT NULL COMMENT '所属承办部门底册',
   site_no varchar(64) DEFAULT NULL COMMENT '所属部门底册代号',
+  item_code varchar(64) DEFAULT NULL COMMENT '事项码(与底册代号配平认卡)',
+  impl_code varchar(64) DEFAULT NULL COMMENT '实施编码(系统发)',
+  undertake_level int DEFAULT NULL COMMENT '承办层级 1省定标准 2市实施 3县延伸',
+  upper_item_code varchar(64) DEFAULT NULL COMMENT '上位名录条目代号(省定标准凭据)',
+  basis_clause varchar(128) DEFAULT NULL COMMENT '设定依据条款号(省定标准凭据)',
+  city_items varchar(255) DEFAULT NULL COMMENT '本市细化条目(市实施凭据)',
+  start_date date DEFAULT NULL COMMENT '起头之日(市实施凭据)',
+  end_date date DEFAULT NULL COMMENT '结尾之日(市实施凭据)',
+  windows varchar(255) DEFAULT NULL COMMENT '延伸到的窗口(县延伸凭据)',
+  recv_points int DEFAULT NULL COMMENT '收件点数目(县延伸凭据)',
   qty decimal(12,2) DEFAULT NULL COMMENT '本卡申报年办件量(件/年)',
   fine_amt decimal(12,2) DEFAULT NULL COMMENT '本卡承诺时限(工作日)',
-  content varchar(255) DEFAULT NULL COMMENT '校验串（随版次序走）',
-  grade_level int DEFAULT NULL COMMENT '年办件量折到的服务监督层级',
+  content varchar(255) DEFAULT NULL COMMENT '校验串（随版次序走，已核对钉死后无手填把手）',
+  grade_level int DEFAULT NULL COMMENT '年办件量折到的服务监督层级(只由系统折)',
+  step_count int DEFAULT NULL COMMENT '已走完的步数(档次由它数出来)',
+  run_no int DEFAULT NULL COMMENT '第几趟(退档重走一趟加一)',
+  ver_flag int DEFAULT '1' COMMENT '版次落点 1现行 0历史',
   status int DEFAULT NULL COMMENT '进展 0待核对 1已核对 2已冻住',
   del_flag int DEFAULT '0' COMMENT '删除标记 0正常 1删除',
-  create_by varchar(64) DEFAULT NULL COMMENT '创建者',
+  create_by varchar(64) DEFAULT NULL COMMENT '开卡人(一钉终身)',
   create_time datetime DEFAULT NULL COMMENT '创建时间',
-  update_by varchar(64) DEFAULT NULL COMMENT '更新者',
+  update_by varchar(64) DEFAULT NULL COMMENT '本趟经办(办一次续一名)',
   update_time datetime DEFAULT NULL COMMENT '更新时间',
   remark varchar(500) DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='实施清单配置卡';
+
+CREATE TABLE IF NOT EXISTS t_item_card_flow (
+  id bigint NOT NULL COMMENT '主键',
+  card_id bigint DEFAULT NULL COMMENT '所属卡主键',
+  bill_no varchar(64) DEFAULT NULL COMMENT '卡号',
+  run_no int DEFAULT NULL COMMENT '第几趟(退档重走各趟分开排)',
+  action varchar(16) DEFAULT NULL COMMENT '过口动作 advance前进 rollback退档 freeze冻住 halt叫停',
+  from_step int DEFAULT NULL COMMENT '动作前步数',
+  to_step int DEFAULT NULL COMMENT '动作后步数',
+  checksum_snap varchar(255) DEFAULT NULL COMMENT '这一趟落下的校验串快照',
+  operator varchar(64) DEFAULT NULL COMMENT '本趟经办',
+  create_time datetime DEFAULT NULL COMMENT '落笔时间',
+  remark varchar(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='实施清单配置卡过口记录';
 
 -- 初始档案数据（两条种子底册：一条在编、一条已撤并）
 -- t_item_dept_arch 两条种子底册：id=0 在编、id=1 已撤并。
